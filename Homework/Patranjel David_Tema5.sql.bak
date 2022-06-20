@@ -1,0 +1,42 @@
+/*Exercitiul 1*/
+with last_job_date as(
+    SELECT
+        j.employee_id,
+        MAX(j.end_date) as end_date1
+    FROM job_history j
+    GROUP BY j.employee_id
+),
+last_job as(
+    SELECT
+        j.employee_id,
+        j.job_id,
+        (jb.min_salary + jb.max_salary)/2 as avg_salary
+    FROM job_history j
+    JOIN last_job_date l on l.employee_id = j.employee_id
+    JOIN jobs jb on j.job_id = jb.job_id
+    WHERE l.end_date1 = j.end_date
+),
+old_new_job as(
+    SELECT
+        e.last_name,
+        e.employee_id,
+        e.job_id as actual_job,
+        (jb.min_salary+jb.max_salary)/2 as avg_actual_salary,
+        lj.job_id as old_job,
+        lj.avg_salary as avg_old_salary    
+    FROM employees e
+    LEFT JOIN last_job lj on e.employee_id = lj.employee_id
+    JOIN jobs jb on e.job_id = jb.job_id
+)
+SELECT
+    o.last_name,
+    CASE
+        WHEN o.old_job IS NULL THEN 'nu a avut alt job'
+        WHEN o.avg_actual_salary > o.avg_old_salary THEN 'promovat'
+        WHEN o.avg_actual_salary = o.avg_old_salary THEN 'a pastrat nivelul'
+        WHEN o.avg_actual_salary < o.avg_old_salary THEN 'penalizat'
+    END AS upgrade_job
+FROM old_new_job o
+ORDER BY upgrade_job DESC
+
+/*Exercitiul 2*/
