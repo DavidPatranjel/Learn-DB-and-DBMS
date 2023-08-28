@@ -1,0 +1,311 @@
+/*ex1*/
+
+DECLARE
+    TYPE tablou_indexat IS TABLE OF emp_dgp.employee_id%TYPE INDEX BY BINARY_INTEGER;
+    t tablou_indexat;
+    sal emp_dgp.salary%TYPE;
+BEGIN
+    select e.employee_id
+    bulk collect into t
+    from emp_dgp e
+    where e.commission_pct is null and ROWNUM <= 5
+    order by e.salary;
+    
+    FOR i IN t.FIRST..t.LAST LOOP
+        select e.salary
+        into sal
+        from emp_dgp e
+        where e.employee_id = t(i);
+        DBMS_OUTPUT.PUT_LINE(t(i)|| ': ' || sal || ' ' || sal * 1.05 || '');
+        update emp_dgp e
+        set e.salary = sal * 1.05
+        where e.employee_id = t(i);
+    END LOOP;    
+    commit;
+END;
+/*ex2*/
+create or replace type tip_orase_dgp is table of varchar2(50);
+
+create table excursie_dgp
+(
+    cod_excursie  number(4)    not null,
+    denumire  varchar2(20) not null,
+    orase tip_orase_dgp,
+    status varchar(30) not null
+)NESTED TABLE orase STORE AS nested_dgp return as value;
+alter table excursie_dgp
+add constraint excursie_dgp_pk primary key (cod_excursie);
+alter table excursie_dgp
+add constraint status_dgp check (status = 'DISPONIBIL' or status = 'ANULAT');
+
+insert into excursie_dgp VALUES (100,'Vacanta la munte',tip_orase_dgp('Busteni', 'Predeal', 'Azuga'), 'ANULAT');
+insert into excursie_dgp VALUES (101,'Vacanta la mare',tip_orase_dgp('Bucure;ti', 'Constanta', ' Costinesti', 'Balcic'), 'DISPONIBIL');
+insert into excursie_dgp VALUES (102,'Vacanta in Moldova',tip_orase_dgp('Botosani', 'Iasi', 'Vaslui', 'Galati'), 'ANULAT');
+insert into excursie_dgp VALUES (103,'Vacanta in Ardeal',tip_orase_dgp('Brasov', 'Bistrita', 'Cluj', 'Deva'), 'DISPONIBIL');
+insert into excursie_dgp VALUES (104,'Vacanta in Dobrogea',tip_orase_dgp('Tulcea', 'Navodari', 'Mamaia', 'Costanta', 'Vama Veche'), 'DISPONIBIL');
+commit;
+
+DECLARE
+    v_cod_excursie excursie_dgp.cod_excursie%TYPE := '&id_excursie';
+    TYPE tablou_aux IS TABLE OF excursie_dgp.orase%TYPE INDEX BY BINARY_INTEGER;
+    t tablou_aux;
+    TYPE tablou_aux2 IS TABLE OF excursie2_dgp.cod_excursie%TYPE INDEX BY BINARY_INTEGER;
+    t1 tablou_aux2;
+    v_oras_nou varchar2(100) := 'Brasov';
+    v_aux  excursie_dgp.orase%TYPE;
+    v_oras1 varchar(100) := '&oras1';
+    v_oras2 varchar(100) := '&oras2';
+    v_oras3 varchar(100) := '&oras_elim';
+    i INTEGER;
+    j INTEGER;
+    k INTEGER;
+    aux varchar(100);
+    l_min INTEGER := 9999;
+BEGIN
+    --salvam orasele din excursia cu idul citit
+    select e.orase
+    into v_aux
+    from excursie_dgp e
+    where e.cod_excursie = v_cod_excursie;
+
+    --add la final b)i
+    v_aux.extend;
+    v_aux(v_aux.last) := 'Galati';
+    
+    --add poz 2 b)ii
+    i := v_aux.last;
+    v_aux.extend;
+    while i >= v_aux.first loop
+        v_aux(i + 1) := v_aux(i);
+        i := v_aux.prior(i);          
+    end loop;
+    v_aux(2) := 'Suceava';
+    
+    --inv ord 2 b)iii
+     for i in v_aux.FIRST..v_aux.LAST LOOP
+        if lower(v_oras1) = lower(v_aux(i)) then j := i;
+        elsif lower(v_oras2) = lower(v_aux(i)) then k := i;
+        end if;
+    end loop;
+    aux := v_aux(j);
+    v_aux(j) := v_aux(k);
+    v_aux(k) := aux;
+    
+    --elim b)iv
+    for i in 1..v_aux.count LOOP
+        if lower(v_oras3) = lower(v_aux(i)) then j := i;
+        end if;
+    end loop;
+    v_aux.delete(j);
+    
+    --salvam schimbarile
+    update excursie_dgp e
+    set e.orase = v_aux
+    where e.cod_excursie = v_cod_excursie;
+
+    commit;
+
+    --afis orase c)
+    DBMS_OUTPUT.PUT_LINE('Avem ' || v_aux.count || ' orase vizitate:');
+    for i in 1..v_aux.count LOOP
+        if v_aux.exists(i)= true then
+            DBMS_OUTPUT.PUT(v_aux(i) || ' ');
+        end if;
+    end loop;
+    DBMS_OUTPUT.PUT_LINE('');
+    
+    --afisarea oraselor d)
+    select e.orase
+    bulk collect into t
+    from excursie_dgp e;
+
+    DBMS_OUTPUT.PUT_LINE('Lista oraselor: ');
+    for i2 in t.FIRST..t.LAST LOOP
+        v_aux := t(i2);
+        for i in v_aux.FIRST..v_aux.LAST LOOP
+            if v_aux.exists(i) = true then 
+                DBMS_OUTPUT.PUT(v_aux(i) || ' ');
+            end if;
+        end loop;
+        DBMS_OUTPUT.PUT_LINE('');
+    end loop;
+
+    --anularea celor cu cele mai putine orase e)
+    for i2 in t.FIRST..t.LAST LOOP
+        if l_min > t(i2).count then l_min := t(i2).count;
+        end if;        
+    end loop;
+    DBMS_OUTPUT.PUT_LINE(l_min || ' ');
+    
+    
+    select e.cod_excursie
+    bulk collect into t1
+    from excursie_dgp e;
+
+    for i2 in t.FIRST..t.LAST LOOP
+        if l_min = t(i2).count then
+            update excursie_dgp e
+            set e.status = 'ANULAT'
+            where e.cod_excursie = t1(i2);
+        end if;        
+    end loop;
+    
+    commit;
+    
+EXCEPTION
+    when no_data_found then
+        DBMS_OUTPUT.PUT_LINE('Nicio linie returnata');
+    when too_many_rows then
+        DBMS_OUTPUT.PUT_LINE('Prea multe linii returnate');
+    when others then
+        DBMS_OUTPUT.PUT_LINE('Alta eroare');
+END;
+
+/*ex3*/
+create or replace type tip_orase2_dgp is varray(20) of varchar(50);
+
+create table excursie2_dgp
+(
+    cod_excursie  number(4)    not null,
+    denumire  varchar2(20) not null,
+    orase tip_orase2_dgp,
+    status varchar(30) not null
+);
+alter table excursie2_dgp
+add constraint excursie2_dgp_pk primary key (cod_excursie);
+alter table excursie2_dgp
+add constraint status2_dgp check (status = 'DISPONIBIL' or status = 'ANULAT');
+
+insert into excursie2_dgp VALUES (100,'Vacanta la munte',tip_orase2_dgp('Busteni', 'Predeal', 'Azuga'), 'ANULAT');
+insert into excursie2_dgp VALUES (101,'Vacanta la mare',tip_orase2_dgp('Bucure;ti', 'Constanta', ' Costinesti', 'Balcic'), 'DISPONIBIL');
+insert into excursie2_dgp VALUES (102,'Vacanta in Moldova',tip_orase2_dgp('Botosani', 'Iasi', 'Vaslui', 'Galati'), 'ANULAT');
+insert into excursie2_dgp VALUES (103,'Vacanta in Ardeal',tip_orase2_dgp('Brasov', 'Bistrita', 'Cluj', 'Deva'), 'DISPONIBIL');
+insert into excursie2_dgp VALUES (104,'Vacanta in Dobrogea',tip_orase2_dgp('Tulcea', 'Navodari', 'Mamaia', 'Costanta', 'Vama Veche'), 'DISPONIBIL');
+
+commit;
+
+DECLARE
+    v_cod_excursie excursie2_dgp.cod_excursie%TYPE := '&id_excursie';
+    TYPE tablou_aux IS TABLE OF excursie2_dgp.orase%TYPE INDEX BY BINARY_INTEGER;
+    t tablou_aux;
+    TYPE tablou_aux2 IS TABLE OF excursie2_dgp.cod_excursie%TYPE INDEX BY BINARY_INTEGER;
+    t1 tablou_aux2;
+    v_oras_nou varchar2(100) := 'Brasov';
+    v_aux  excursie2_dgp.orase%TYPE;
+    v_aux2  excursie2_dgp.orase%TYPE := tip_orase2_dgp();
+    v_oras1 varchar(100) := '&oras1';
+    v_oras2 varchar(100) := '&oras2';
+    v_oras3 varchar(100) := '&oras_elim';
+    i INTEGER;
+    j INTEGER;
+    k INTEGER;
+    aux varchar(100);
+    l_min INTEGER := 9999;
+BEGIN
+    --salvam orasele din excursia cu idul citit
+    select e.orase
+    into v_aux
+    from excursie2_dgp e
+    where e.cod_excursie = v_cod_excursie;
+
+    --add la final b)i
+    v_aux.extend;
+    v_aux(v_aux.last) := 'Galati';
+    
+    --add poz 2 b)ii
+    i := v_aux.last;
+    v_aux.extend;
+    while i >= v_aux.first loop
+        v_aux(i + 1) := v_aux(i);
+        i := v_aux.prior(i);          
+    end loop;
+    v_aux(2) := 'Suceava';
+    
+    --inv ord 2 b)iii
+    
+     for i in v_aux.FIRST..v_aux.LAST LOOP
+        if lower(v_oras1) = lower(v_aux(i)) then j := i;
+        elsif lower(v_oras2) = lower(v_aux(i)) then k := i;
+        end if;
+    end loop;
+    aux := v_aux(j);
+    v_aux(j) := v_aux(k);
+    v_aux(k) := aux;
+    
+    --elim b)iv
+    
+    for i in 1..v_aux.count LOOP
+        if lower(v_oras3) = lower(v_aux(i)) then j := i;
+        end if;
+    end loop;
+    
+    for i in 1..v_aux.count LOOP
+        if i<>j then 
+            v_aux2.extend;
+            v_aux2(v_aux2.last) := v_aux(i);
+        end if;
+    end loop;
+    v_aux := v_aux2;
+    v_aux2.delete;
+    --salvam schimbarile
+    
+    update excursie2_dgp e
+    set e.orase = v_aux
+    where e.cod_excursie = v_cod_excursie;
+
+    commit;
+
+    --afis orase c)
+    DBMS_OUTPUT.PUT_LINE('Avem ' || v_aux.count || ' orase vizitate:');
+    for i in 1..v_aux.count LOOP
+        if v_aux.exists(i) = true then
+            DBMS_OUTPUT.PUT(v_aux(i) || ' ');
+        end if;
+    end loop;
+    DBMS_OUTPUT.PUT_LINE('');
+    
+    --afisarea oraselor d)
+    select e.orase
+    bulk collect into t
+    from excursie2_dgp e;
+
+    DBMS_OUTPUT.PUT_LINE('Lista oraselor: ');
+    for i2 in t.FIRST..t.LAST LOOP
+        v_aux := t(i2);
+        for i in v_aux.FIRST..v_aux.LAST LOOP
+            if v_aux.exists(i) = true then
+                DBMS_OUTPUT.PUT(v_aux(i) || ' ');
+            end if;
+        end loop;
+        DBMS_OUTPUT.PUT_LINE('');
+    end loop;
+
+    --anularea celor cu cele mai putine orase e)
+    for i2 in t.FIRST..t.LAST LOOP
+        if l_min > t(i2).count then l_min := t(i2).count;
+        end if;        
+    end loop;
+    DBMS_OUTPUT.PUT_LINE(l_min || ' ');
+    
+    select e.cod_excursie
+    bulk collect into t1
+    from excursie2_dgp e;
+
+    for i2 in t.FIRST..t.LAST LOOP
+        if l_min = t(i2).count then
+            update excursie2_dgp e
+            set e.status = 'ANULAT'
+            where e.cod_excursie = t1(i2);
+        end if;        
+    end loop;
+    
+    commit;
+    
+EXCEPTION
+    when no_data_found then
+        DBMS_OUTPUT.PUT_LINE('Nicio linie returnata');
+    when too_many_rows then
+        DBMS_OUTPUT.PUT_LINE('Prea multe linii returnate');
+    when others then
+        DBMS_OUTPUT.PUT_LINE('Alta eroare');
+END;

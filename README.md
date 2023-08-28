@@ -1,2 +1,2 @@
-# Learn-Oracle
-Homework and Final project at UNI
+# Learn-Oracle v2
+Homework and Final projects for DB and DBMS at UNI

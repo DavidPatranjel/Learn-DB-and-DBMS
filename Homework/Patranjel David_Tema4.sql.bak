@@ -1,7 +1,0 @@
-SELECT
-    e.employee_id,
-    d.menu_id,
-    MAX(d.quantity)
-FROM orders e
-FULL OUTER JOIN order_menu d ON e.order_id = d.order_id
-GROUP BY e.employee_id

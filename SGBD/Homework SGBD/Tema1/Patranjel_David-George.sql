@@ -1,0 +1,353 @@
+/*
+Problema 1
+MEMBER: PK = member_id
+TITLE: PK = title_id
+TITLE: PK = (copy_id, title_id)
+RENTAL: PK = (book_date,copy_id, member_id, title_id)
+RESERVATION: PK = (res_date, member_id, title_id)
+*/
+/*Problema 2*/
+create table member
+(
+    member_id  number(5)    not null,
+    last_name  varchar2(50) not null,
+    first_name varchar2(50) not null,
+    address    varchar2(100),
+    city       varchar(50),
+    phone      number(10)   not null,
+    join_date  date
+);
+alter table member
+add(
+    constraint member_pk primary key (member_id)
+    );
+
+
+create table title
+(
+    title_id  number(5)    not null,
+    title  varchar2(50) not null,
+    description    varchar2(100),
+    rating       number(2) not null,
+    category      varchar2(50)   not null,
+    release_date    date not null
+);
+alter table title
+add(
+    constraint title_pk primary key (title_id)
+    );
+
+create table title_copy
+(
+    copy_id number(5)    not null,
+    title_id number(5)    not null,
+    status  varchar2(25)  not null
+);
+
+alter table title_copy
+add(
+    constraint title_copy_pk primary key (copy_id, title_id)
+    );
+
+alter table title_copy
+add(
+    constraint title_copy_fk foreign key (title_id)
+          	  REFERENCES title(title_id)
+    );
+
+create table rental
+(
+    book_date date not null,
+    copy_id number(5)    not null,
+    member_id number(5)    not null,
+    title_id number(5)    not null,
+    act_ret_date date not null,
+    exp_ret_date date not null
+);
+
+alter table rental
+add(
+    constraint rental_pk primary key (book_date, copy_id, member_id, title_id)
+    )
+add(
+    constraint rental_fk1 foreign key (copy_id, title_id) references title_copy(copy_id, title_id)
+    )
+add(
+    constraint rental_fk2 foreign key (member_id) references member(member_id)
+    );
+
+
+create table reservation
+(
+    res_date date not null,
+    member_id number(5)    not null,
+    title_id number(5)    not null
+);
+
+alter table reservation
+add(
+    constraint reservation_pk primary key (res_date, member_id, title_id)
+    )
+add(
+    constraint reservation_fk1 foreign key (title_id) references title(title_id)
+    )
+add(
+    constraint reservation_fk2 foreign key (member_id) references member(member_id)
+    );
+	
+	
+/*Problema 4*/
+with reqs as(select
+                r.TITLE_ID,
+                count(*) as requests
+            from RENTAL r
+            group by r.TITLE_ID),
+    aux as(select
+                t.CATEGORY,
+                count(*) nr_filme,
+                sum(r.requests) nr_exemplare
+            from title t
+            join reqs r on t.TITLE_ID = r.TITLE_ID
+            group by t.CATEGORY)
+
+select
+    *
+from aux a
+where a.nr_exemplare = (select max(aa.NR_EXEMPLARE) from aux aa)
+
+/*Problema 5*/
+with aux as(
+    select
+    title_id,
+    count(COPY_ID) as nr
+    from(
+        select tc.title_id,
+               tc.copy_id
+        from TITLE_COPY tc
+        where tc.status is not null
+         )
+    group by TITLE_ID
+)
+
+select t.title as Nume,
+       a.nr as Numar
+from aux a
+join title t on a.TITLE_ID = t.TITLE_ID;
+
+
+/*Problema 6*/
+select
+    t.title,
+    r1.copy_id,
+    tc.status,
+    case
+        when r1.act_ret_date is null then 'RENTED'
+        else 'AVAILABLE'
+    end
+from rental r1
+join title t on t.title_id = r1.title_id
+join title_copy tc on tc.title_id = r1.title_id
+where tc.copy_id = r1.copy_id and (r1.copy_id, r1.title_id, r1.book_date) in(
+    select
+        r.copy_id,
+        r.title_id,
+        max(r.book_date)
+    from rental r
+    group by (r.copy_id, r.title_id)
+)
+/*Problema 7a*/
+with ex6 as(select
+                t.title,
+                r1.copy_id,
+                tc.status,
+                case
+                    when r1.act_ret_date is null then 'RENTED'
+                    else 'AVAILABLE'
+                end as status_nou
+            from rental r1
+            join title t on t.title_id = r1.title_id
+            join title_copy tc on tc.title_id = r1.title_id
+            where tc.copy_id = r1.copy_id and (r1.copy_id, r1.title_id, r1.book_date) in(
+                select
+                    r.copy_id,
+                    r.title_id,
+                    max(r.book_date)
+                from rental r
+                group by (r.copy_id, r.title_id)
+            )
+)
+
+select
+    count(*) as nr_eronate
+from ex6 e
+where e.status <> e.status_nou
+
+/*Problema 7b*/
+create table title_copy_dpg as select * from title_copy;
+
+
+update title_copy_dpg d
+set d.status = case when (d.title_id, d.copy_id) in (
+            select aux.title_id, aux.copy_id from( 
+                select
+                    t.title,
+                    t.title_id,
+                    r1.copy_id,
+                    tc.status,
+                    case
+                        when r1.act_ret_date is null then 'RENTED'
+                        else 'AVAILABLE'
+                    end as status_nou
+                from rental r1
+                join title t on t.title_id = r1.title_id
+                join title_copy tc on tc.title_id = r1.title_id
+                where tc.copy_id = r1.copy_id and (r1.copy_id, r1.title_id, r1.book_date) in(
+                    select
+                        r.copy_id,
+                        r.title_id,
+                        max(r.book_date)
+                    from rental r
+                    group by (r.copy_id, r.title_id)
+                )
+            ) aux where aux.status <> aux.status_nou and aux.status_nou like 'AVAILABLE'
+        ) then 'AVAILABLE'
+        else 'RENTED'
+        end
+where (d.title_id, d.copy_id) in (
+    select aux.title_id, aux.copy_id from( 
+                select
+                    t.title,
+                    t.title_id,
+                    r1.copy_id,
+                    tc.status,
+                    case
+                        when r1.act_ret_date is null then 'RENTED'
+                        else 'AVAILABLE'
+                    end as status_nou
+                from rental r1
+                join title t on t.title_id = r1.title_id
+                join title_copy tc on tc.title_id = r1.title_id
+                where tc.copy_id = r1.copy_id and (r1.copy_id, r1.title_id, r1.book_date) in(
+                    select
+                        r.copy_id,
+                        r.title_id,
+                        max(r.book_date)
+                    from rental r
+                    group by (r.copy_id, r.title_id)
+                )
+            ) aux where aux.status <> aux.status_nou
+);
+
+commit;
+
+/*Problema 8*/
+select
+    case
+        when (select count(*) from reservation) = (select count(*) from(
+            select 
+                *
+            from reservation rs
+            join rental rt on rs.member_id = rt.member_id and rs.title_id = rt.title_id
+            where rs.res_date = rt.book_date
+        )) then 'DA'
+        else 'NU'
+    end as rez
+from dual;
+
+/*Problema 9*/
+with nume as(
+    select distinct
+        t.title,
+        tc.title_id
+    from title t
+    join title_copy tc on t.title_id = tc.title_id
+),numar as(
+    select
+        r.MEMBER_ID,
+        r.TITLE_ID,
+        count(*) as nr
+    from rental r
+    group by r.MEMBER_ID, r.TITLE_ID
+     )
+
+
+select
+    M.FIRST_NAME,
+    M.LAST_NAME,
+    n.title,
+    r.nr
+from numar r
+join nume n on r.TITLE_ID = n.TITLE_ID
+join MEMBER M on M.MEMBER_ID = r.MEMBER_ID
+order by M.FIRST_NAME;
+
+/*Problema 10*/
+with nume as(
+    select distinct
+        t.title,
+        tc.title_id
+    from title t
+    join title_copy tc on t.title_id = tc.title_id
+),numar as(
+    select
+        r.MEMBER_ID,
+        r.TITLE_ID,
+        r.COPY_ID,
+        count(*) as nr
+    from rental r
+    group by r.MEMBER_ID, r.TITLE_ID, r.COPY_ID
+     )
+
+
+select
+    M.FIRST_NAME,
+    M.LAST_NAME,
+    n.title,
+    r.COPY_ID,
+    r.nr
+from numar r
+join nume n on r.TITLE_ID = n.TITLE_ID
+join MEMBER M on M.MEMBER_ID = r.MEMBER_ID
+order by M.FIRST_NAME;
+
+/*Problema 11*/
+with tabel as (select r.COPY_ID,
+                      r.TITLE_ID,
+                      count(*) as nr_per_copie
+               from RENTAL r
+               group by (r.COPY_ID, r.TITLE_ID)),
+    tabel2 as (select
+                    t.TITLE_ID,
+                    max(t.nr_per_copie) as maxim
+                from tabel t
+                group by (t.TITLE_ID)),
+    maxime as (select
+                    t.TITLE_ID,
+                    t.COPY_ID
+                from tabel t
+                join tabel2 t2 on t.nr_per_copie = t2.maxim
+                where t.TITLE_ID = t2.TITLE_ID)
+
+select
+    tc.TITLE_ID,
+    tc.COPY_ID,
+    tc.STATUS
+from TITLE_COPY tc
+join maxime m on tc.TITLE_ID = m.TITLE_ID
+where tc.COPY_ID = m.COPY_ID
+
+/*Problema 12*/
+/*a)*/
+select count(*) as nr from(
+    select *
+    from rental r
+    where extract(MONTH from r.book_date) = extract(MONTH from sysdate)
+        and extract(DAY from r.book_date)< 3
+)
+
+/*b) c)*/
+select count(*) as nr from(
+    select *
+    from rental r
+    where extract(MONTH from r.book_date) = extract(MONTH from sysdate)
+)
